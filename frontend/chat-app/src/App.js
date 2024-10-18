@@ -87,7 +87,7 @@ function App() {
         socket.emit('group_message', selectedGroup, inputValue);
       } else if (matchedUser) {
         socket.emit('private_message', matchedUser, inputValue);
-        // 不需要在这里添加消息到状态，因为服务器会发送回来1
+        // 不需要在这里添加消息到状态，因为服务器会发送回来
       }
       setInputValue('');
     }
