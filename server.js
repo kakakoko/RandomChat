@@ -1,6 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
 
 console.log('开始初始化服务器...');
 
@@ -11,6 +16,58 @@ const io = socketIo(server, {
     origin: "http://localhost:3000",
     methods: ["GET", "POST"]
   }
+});
+
+app.use(express.json());
+app.use(cors());
+
+mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+const UserSchema = new mongoose.Schema({
+  username: { type: String, unique: true, required: true },
+  password: { type: String, required: true },
+  friends: [String],
+  groups: [String]
+});
+
+const User = mongoose.model('User', UserSchema);
+
+app.post('/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ username, password: hashedPassword });
+    await user.save();
+    res.status(201).json({ message: '用户注册成功' });
+  } catch (error) {
+    console.error('注册错误:', error);
+    res.status(500).json({ message: '注册失败', error: error.message });
+  }
+});
+
+app.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(400).json({ message: '用户不存在' });
+    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: '密码错误' });
+    }
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token, username });
+  } catch (error) {
+    res.status(500).json({ message: '登录失败', error: error.message });
+  }
+});
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send('Something broke!');
 });
 
 const PORT = process.env.PORT || 5001;

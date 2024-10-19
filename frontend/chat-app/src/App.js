@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
+import axios from 'axios';
 import './App.css';
 
 const socket = io('http://localhost:5001');
 
 function App() {
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loggedIn, setLoggedIn] = useState(false);
   const [messages, setMessages] = useState([]);
   const [privateMessages, setPrivateMessages] = useState({});
@@ -63,9 +65,35 @@ function App() {
     };
   }, []);
 
-  const handleLogin = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    socket.emit('login', username);
+    try {
+      const response = await axios.post('http://localhost:5001/register', { username, password });
+      alert('注册成功，请登录');
+    } catch (error) {
+      if (error.response) {
+        // 服务器响应了，但状态码不在 2xx 范围内
+        alert('注册失败: ' + error.response.data.message);
+      } else if (error.request) {
+        // 请求已经发出，但没有收到响应
+        alert('注册失败: 无法连接到服务器');
+      } else {
+        // 在设置请求时发生了一些错误
+        alert('注册失败: ' + error.message);
+      }
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post('http://localhost:5001/login', { username, password });
+      localStorage.setItem('token', response.data.token);
+      setLoggedIn(true);
+      socket.emit('login', username);
+    } catch (error) {
+      alert('登录失败: ' + error.response.data.message);
+    }
   };
 
   const handleAddFriend = (e) => {
@@ -107,9 +135,30 @@ function App() {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="输入用户名"
+            placeholder="用户名"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="密码"
           />
           <button type="submit">登录</button>
+        </form>
+        <form onSubmit={handleRegister}>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="用户名"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="密码"
+          />
+          <button type="submit">注册</button>
         </form>
       </div>
     );
