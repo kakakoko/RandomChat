@@ -65,6 +65,28 @@ app.post('/login', async (req, res) => {
   }
 });
 
+app.get('/users', async (req, res) => {
+  try {
+    const users = await User.find({}, 'username'); // 只返回用户名，不返回密码
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: '获取用户列表失败', error: error.message });
+  }
+});
+
+app.get('/user/:username', async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username }, 'username');
+    if (user) {
+      res.json(user);
+    } else {
+      res.status(404).json({ message: '用户未找到' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: '查询用户失败', error: error.message });
+  }
+});
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).send('Something broke!');

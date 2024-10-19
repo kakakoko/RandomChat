@@ -6,9 +6,12 @@ import './App.css';
 const socket = io('http://localhost:5001');
 
 function App() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
   const [loggedIn, setLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState('');
   const [messages, setMessages] = useState([]);
   const [privateMessages, setPrivateMessages] = useState({});
   const [inputValue, setInputValue] = useState('');
@@ -20,10 +23,20 @@ function App() {
   const [matchedUser, setMatchedUser] = useState(null);
   const [commonFriends, setCommonFriends] = useState([]);
 
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get('http://localhost:5001/users');
+      console.log('Users:', response.data);
+      // 可以将用户列表保存到状态中，然后在UI中显示
+    } catch (error) {
+      console.error('获取用户列表失败:', error);
+    }
+  };
+
   useEffect(() => {
     socket.on('login_success', (username) => {
       setLoggedIn(true);
-      setUsername(username);
+      setCurrentUser(username);
     });
 
     socket.on('friend_added', (friendName) => {
@@ -65,34 +78,28 @@ function App() {
     };
   }, []);
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await axios.post('http://localhost:5001/register', { username, password });
-      alert('注册成功，请登录');
-    } catch (error) {
-      if (error.response) {
-        // 服务器响应了，但状态码不在 2xx 范围内
-        alert('注册失败: ' + error.response.data.message);
-      } else if (error.request) {
-        // 请求已经发出，但没有收到响应
-        alert('注册失败: 无法连接到服务器');
-      } else {
-        // 在设置请求时发生了一些错误
-        alert('注册失败: ' + error.message);
-      }
-    }
-  };
-
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:5001/login', { username, password });
+      const response = await axios.post('http://localhost:5001/login', { username: loginUsername, password: loginPassword });
       localStorage.setItem('token', response.data.token);
       setLoggedIn(true);
-      socket.emit('login', username);
+      setCurrentUser(loginUsername);
+      socket.emit('login', loginUsername);
     } catch (error) {
-      alert('登录失败: ' + error.response.data.message);
+      alert('登录失败: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post('http://localhost:5001/register', { username: registerUsername, password: registerPassword });
+      alert('注册成功，请登录');
+      setRegisterUsername('');
+      setRegisterPassword('');
+    } catch (error) {
+      alert('注册失败: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -115,7 +122,6 @@ function App() {
         socket.emit('group_message', selectedGroup, inputValue);
       } else if (matchedUser) {
         socket.emit('private_message', matchedUser, inputValue);
-        // 不需要在这里添加消息到状态，因为服务器会发送回来
       }
       setInputValue('');
     }
@@ -133,30 +139,30 @@ function App() {
         <form onSubmit={handleLogin}>
           <input
             type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="用户名"
+            value={loginUsername}
+            onChange={(e) => setLoginUsername(e.target.value)}
+            placeholder="登录用户名"
           />
           <input
             type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="密码"
+            value={loginPassword}
+            onChange={(e) => setLoginPassword(e.target.value)}
+            placeholder="登录密码"
           />
           <button type="submit">登录</button>
         </form>
         <form onSubmit={handleRegister}>
           <input
             type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="用户名"
+            value={registerUsername}
+            onChange={(e) => setRegisterUsername(e.target.value)}
+            placeholder="注册用户名"
           />
           <input
             type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="密码"
+            value={registerPassword}
+            onChange={(e) => setRegisterPassword(e.target.value)}
+            placeholder="注册密码"
           />
           <button type="submit">注册</button>
         </form>
@@ -166,7 +172,7 @@ function App() {
 
   return (
     <div className="App">
-      <h1>欢迎, {username}!</h1>
+      <h1>欢迎, {currentUser}!</h1>
       <div className="friends-section">
         <h2>好友列表</h2>
         <ul>
