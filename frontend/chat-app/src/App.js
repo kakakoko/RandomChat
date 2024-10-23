@@ -3,6 +3,8 @@ import io from 'socket.io-client';
 import axios from 'axios';
 import './App.css';
 
+axios.defaults.baseURL = 'http://localhost:5001';
+
 const socket = io('http://localhost:5001');
 
 function App() {
@@ -39,8 +41,8 @@ function App() {
       setCurrentUser(username);
     });
 
-    socket.on('friend_added', (friendName) => {
-      setFriends(prevFriends => [...prevFriends, friendName]);
+    socket.on('friend_added', () => {
+      fetchFriends(); // 当添加新好友时，重新获取好友列表
     });
 
     socket.on('friend_not_found', (friendName) => {
@@ -67,6 +69,10 @@ function App() {
       }));
     });
 
+    socket.on('add_friend_error', (errorMessage) => {
+      alert(errorMessage);
+    });
+
     return () => {
       socket.off('login_success');
       socket.off('friend_added');
@@ -75,8 +81,24 @@ function App() {
       socket.off('group_message');
       socket.off('matched');
       socket.off('private_message');
+      socket.off('add_friend_error');
     };
   }, []);
+
+  useEffect(() => {
+    if (loggedIn) {
+      fetchFriends();
+    }
+  }, [loggedIn]);
+
+  const fetchFriends = async () => {
+    try {
+      const response = await axios.get(`http://localhost:5001/friends/${currentUser}`);
+      setFriends(response.data.friends);
+    } catch (error) {
+      console.error('获取好友列表失败:', error);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -103,10 +125,19 @@ function App() {
     }
   };
 
-  const handleAddFriend = (e) => {
+  const handleAddFriend = async (e) => {
     e.preventDefault();
-    socket.emit('add_friend', friendName);
-    setFriendName('');
+    console.log('Attempting to add friend:', friendName);
+    try {
+      const response = await axios.post('/add-friend', { username: currentUser, friendName });
+      console.log('Server response:', response.data);
+      setFriendName('');
+      fetchFriends(); // 刷新好友列表
+      alert('好友添加成功！');
+    } catch (error) {
+      console.error('添加好友失败:', error);
+      alert('添加好友失败: ' + (error.response?.data?.message || error.message));
+    }
   };
 
   const handleCreateGroup = (e) => {

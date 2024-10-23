@@ -18,18 +18,22 @@ const io = socketIo(server, {
   }
 });
 
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
-mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGODB_URI, { 
+  useNewUrlParser: true, 
+  useUnifiedTopology: true,
+  useFindAndModify: false,
+  useCreateIndex: true 
+})
+.then(() => console.log('Connected to MongoDB'))
+.catch(err => console.error('MongoDB connection error:', err));
 
 const UserSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true },
   password: { type: String, required: true },
-  friends: [String],
-  groups: [String]
+  friends: [{ type: String }]
 });
 
 const User = mongoose.model('User', UserSchema);
@@ -87,6 +91,60 @@ app.get('/user/:username', async (req, res) => {
   }
 });
 
+// 修改获取好友列表路由
+app.get('/friends/:username', async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username });
+    if (!user) {
+      return res.status(404).json({ message: '用户不存在' });
+    }
+    res.status(200).json({ friends: user.friends });
+  } catch (error) {
+    res.status(500).json({ message: '获取好友列表失败', error: error.message });
+  }
+});
+
+// 确保这个路由存在
+app.post('/add-friend', async (req, res) => {
+  console.log('Received add friend request:', req.body);
+  try {
+    const { username, friendName } = req.body;
+    const user = await User.findOne({ username });
+    const friend = await User.findOne({ username: friendName });
+
+    console.log('User found:', user);
+    console.log('Friend found:', friend);
+
+    if (!user || !friend) {
+      console.log('User or friend not found');
+      return res.status(404).json({ message: '用户或好友不存在' });
+    }
+
+    if (user.friends.includes(friendName)) {
+      console.log('Already friends');
+      return res.status(400).json({ message: '已经是好友了' });
+    }
+
+    user.friends.push(friendName);
+    friend.friends.push(username);
+
+    console.log('User before save:', user);
+    console.log('Friend before save:', friend);
+
+    await user.save();
+    await friend.save();
+
+    console.log('User after save:', user);
+    console.log('Friend after save:', friend);
+
+    console.log('Friend added successfully');
+    res.status(200).json({ message: '添加好友成功' });
+  } catch (error) {
+    console.error('Error adding friend:', error);
+    res.status(500).json({ message: '添加好友失败', error: error.message });
+  }
+});
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).send('Something broke!');
@@ -111,17 +169,31 @@ io.on('connection', (socket) => {
   });
 
   // 添加好友
-  socket.on('add_friend', (friendName) => {
-    const user = users.get(socket.id);
-    const friend = Array.from(users.values()).find(u => u.username === friendName);
-    if (friend) {
-      user.friends.add(friendName);
-      friend.friends.add(user.username);
+  socket.on('add_friend', async ({ username, friendName }) => {
+    try {
+      const user = await User.findOne({ username });
+      const friend = await User.findOne({ username: friendName });
+
+      if (!user || !friend) {
+        socket.emit('add_friend_error', '用户或好友不存在');
+        return;
+      }
+
+      if (user.friends.includes(friendName)) {
+        socket.emit('add_friend_error', '已经是好友了');
+        return;
+      }
+
+      user.friends.push(friendName);
+      friend.friends.push(username);
+
+      await user.save();
+      await friend.save();
+
       socket.emit('friend_added', friendName);
-      io.to(getSocketIdByUsername(friendName)).emit('friend_added', user.username);
-      console.log(`${user.username} 和 ${friendName} 成为好友`);
-    } else {
-      socket.emit('friend_not_found', friendName);
+      io.to(friend.socketId).emit('friend_added', username);
+    } catch (error) {
+      socket.emit('add_friend_error', '添加好友失败');
     }
   });
 
@@ -208,10 +280,10 @@ function randomPair(arr) {
   return result;
 }
 
-console.log('准备启动服务器...');
+console.log('准备启务器...');
 
 server.listen(PORT, () => {
-  console.log(`服务器运行在 http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 console.log('服务器启动过程完成');
